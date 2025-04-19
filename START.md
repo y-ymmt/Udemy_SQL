@@ -1,90 +1,125 @@
-以下はPostgreSQLの最新版（現時点ではPostgreSQL 15.3）をDockerで構築する手順です。
+# PostgreSQL Docker環境構築手順
 
----
+## 前提条件
+- Dockerがインストールされていること
+- Docker Desktopが起動していること（Windows環境）
 
-## **手順**
+## 手順
 
-### **1. Dockerのインストール**
-- Dockerがインストールされていない場合は、[公式ページ](https://www.docker.com/)からインストールしてください。
+1. プロジェクトのルートディレクトリに`docker-compose.yml`ファイルを作成します。
 
----
+```yaml
+version: '3.8'
 
-### **2. 最新版PostgreSQLイメージの取得**
-- PostgreSQLの最新版を取得するには以下のコマンドを実行します。
+services:
+  db:
+    image: postgres:latest
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
 
+volumes:
+  postgres_data:
+    driver: local
+```
+
+2. Docker Composeでコンテナを起動します：
 ```bash
-docker pull postgres:latest
+docker-compose up -d
 ```
 
-- または、特定のバージョン（例: 15.3）を指定して取得する場合は以下を使用します。
-
+3. コンテナの状態を確認します：
 ```bash
-docker pull postgres:15.3
+docker-compose ps
 ```
 
----
+4. PostgreSQLに接続するには以下の情報を使用します：
+- ホスト: localhost
+- ポート: 5432
+- ユーザー名: test
+- パスワード: test
+- データベース名: test
 
-### **3. コンテナの起動**
-以下のコマンドでPostgreSQLコンテナを起動します。
-
+## データの永続化について
+- データは`postgres_data`という名前のDockerボリュームに保存されます
+- コンテナを削除しても、データは保持されます
+- ボリュームの確認は以下のコマンドで行えます：
 ```bash
-docker run -d --name postgres-latest -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=test -v C:\Users\yimam\Desktop\git\Udemy_SQL\db_volume:/var/lib/postgresql/data -p 5432:5432 postgres:latest
+docker volume ls
 ```
 
-#### **オプション説明**
-- `--name`: コンテナ名（例: `postgres-latest`）。
-- `-e POSTGRES_USER`: PostgreSQLのユーザー名。
-- `-e POSTGRES_PASSWORD`: PostgreSQLのパスワード。
-- `-e POSTGRES_DB`: デフォルトで作成されるデータベース名。
-- `-p 5432:5432`: ホストとコンテナ間でポート5432をマッピング。
+## 注意事項
+- パスワードは本番環境では必ず変更してください
+- 必要に応じて環境変数ファイル（.env）を使用してください
 
----
-
-### **4. コンテナの状態確認**
-コンテナが正常に起動しているか確認します。
-
+## コンテナの停止方法
 ```bash
-docker ps
+docker-compose down
 ```
 
-出力例:
-```plaintext
-CONTAINER ID   IMAGE          COMMAND                  CREATED         STATUS         PORTS                    NAMES
-aeb38b69100e   postgres:latest "docker-entrypoint.s…"   10 seconds ago  Up 10 seconds  0.0.0.0:5432->5432/tcp   postgres-latest
-```
+## PostgreSQLコンテナでSQLを実行する方法
 
----
-
-### **5. 接続確認**
-#### **a) ホストマシンから接続**
-PostgreSQLクライアントツール（例: `psql`）を使用して接続します。
-
+### 方法1: psqlコマンドを使用してコンテナ内に入る
 ```bash
-psql -h localhost -p 5432 -U your_user -d your_database
+docker exec -it postgres_db psql -U test -d test
 ```
 
-#### **b) Dockerコンテナ内で確認**
-コンテナに入ってPostgreSQLに接続します。
-
+### 方法2: bashでコンテナに入り、その後psqlを実行
 ```bash
-docker exec -it postgres-latest bash
-psql -U your_user -d your_database
+# コンテナのbashに入る
+docker exec -it postgres_db bash
+
+# コンテナ内でpsqlを実行
+psql -U test -d test
 ```
 
----
+### よく使うpsqlコマンド
+- `\l` - データベース一覧の表示
+- `\c データベース名` - データベースの切り替え
+- `\dt` - テーブル一覧の表示
+- `\d テーブル名` - テーブルの構造を表示
+- `\q` - psqlを終了
 
-### **6. データ永続化（オプション）**
-データを永続化するには、ボリュームをマウントします。以下のように設定してください。
+### SQLの実行例
+```sql
+-- テーブルの作成
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100),
+    email VARCHAR(100)
+);
 
-```bash
-docker run -d \
-  --name postgres-latest \
-  -e POSTGRES_USER=your_user \
-  -e POSTGRES_PASSWORD=your_password \
-  -e POSTGRES_DB=your_database \
-  -v /path/to/local/data:/var/lib/postgresql/data \
-  -p 5432:5432 \
-  postgres:latest
+-- データの挿入
+INSERT INTO users (name, email) VALUES ('テストユーザー', 'test@example.com');
+
+-- データの確認
+SELECT * FROM users;
 ```
 
-`/path/to/local/data` はホスト側のデータ保存先ディレクトリです。
+### 注意事項
+- コンテナ名（postgres_db）は`docker-compose.yml`で設定した名前と一致している必要があります
+- ユーザー名（postgres）とデータベース名（mydatabase）は環境設定に応じて変更してください
+
+このセットアップでは以下の特徴があります：
+
+1. PostgreSQLの最新バージョンを使用
+2. データの永続化にDockerボリュームを使用
+3. デフォルトのポート5432を使用
+4. コンテナの自動再起動設定
+5. Windows環境での実行を考慮した設定
+
+必要に応じて、以下のようなカスタマイズも可能です：
+- PostgreSQLのバージョンの指定
+- ポート番号の変更
+- 環境変数の外部ファイル化
+- バックアップスクリプトの追加
+
+これらの設定について、さらに詳しい説明や特定の設定の変更が必要な場合は、お申し付けください。
